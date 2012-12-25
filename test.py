@@ -1,4 +1,4 @@
-import unittest
+import unittest, pymongo, bson
 import lingo
 
 class SampleEmbeddedModel(lingo.Model):
@@ -9,7 +9,7 @@ class SampleEmbeddedModel(lingo.Model):
 
 class SampleModel(lingo.Model):
 	class __Prototype__:
-		_id=lingo.Field(unicode)
+		_id=lingo.Field(bson.ObjectId)
 		strField=lingo.Field(unicode, default=u"")
 		embedField=lingo.Field(SampleEmbeddedModel, default=SampleEmbeddedModel)
 
@@ -17,7 +17,8 @@ SampleModel.__Prototype__.linkField=lingo.Field(SampleModel, default=None, cast=
 
 class TestLingo(unittest.TestCase):
 	def setUp(self):
-		pass
+		self.conn=pymongo.Connection("localhost")
+		self.db=self.conn["lingo-test"]
 
 	def test_FieldValidationWithCasting(self):
 		f=lingo.Field(int, default=0)
@@ -74,13 +75,24 @@ class TestLingo(unittest.TestCase):
 		i.embedField.intField="12"
 		self.assertEquals(i.embedField.intField, 12)
 
-	def test_asdict(self):
-		foo=SampleModel()
-		bar=SampleModel()
-		bar._id=100
-		foo.linkField=bar
-		d=foo._asdict()
-		self.assertEquals(d, {"_id": None, "strField": u"", "embedField": {"strField": u"", "intField": 0}, "linkField": u"100"})
+	def test_getDefaultCollection(self):
+		self.assertEquals(SampleModel._getCollection(self.db), self.db["SampleModel"])
+
+	def test_getExplicitCollection(self):
+		SampleModel.__Prototype__.__Collection__="foobar"
+		self.assertEquals(SampleModel._getCollection(self.db), self.db["foobar"])
+		del(SampleModel.__Prototype__.__Collection__)
+
+	def test_CannotSaveEmbeddedModels(self):
+		i=SampleEmbeddedModel()
+		with self.assertRaises(lingo.ModelError):
+			i.save(self.db)
+
+	def test_NewObjectId(self):
+		i=SampleModel()
+		i.save(self.db)
+		self.assertIsInstance(i._id, bson.ObjectId)
+		self.assertGreater(len(str(i._id)), 0)
 
 if __name__=="__main__":
 	unittest.main()

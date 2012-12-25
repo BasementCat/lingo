@@ -56,6 +56,10 @@ class Model(object):
 			raise ModelError("Model %s lacks a prototype"%(self.__name__,))
 
 	@classmethod
+	def _getCollection(self, db):
+		return db[self._clsattr("__Collection__") or self.__name__]
+
+	@classmethod
 	def _fields(self):
 		if hasattr(self, "__Prototype__"):
 			return {k:v for k,v in self.__Prototype__.__dict__.items() if isinstance(v, Field)}
@@ -88,13 +92,24 @@ class Model(object):
 		else:
 			return self.__dict__[k]
 
-	def _asdict(self):
+	def _asdict(self, skip=None):
 		out={}
 		for k,v in self.__dict__['__data__'].items():
+			if skip and k in skip:
+				continue
 			if isinstance(v, Model):
 				if v.__class__._clsattr("__Embedded__"):
 					v=v._asdict()
 				else:
-					v=v._id
+					v="%s,%s"%(v.__class__.__name__, str(v._id))
 			out[k]=v
 		return out
+
+	def save(self, db, **kwargs):
+		if self.__class__._clsattr("__Embedded__"):
+			raise ModelError("Model %s is embedded and cannot be saved"%(self.__class__.__name__,))
+		if self._id:
+			self.__class__._getCollection(db).update({"_id": self._id}, self._asdict(skip=["_id"]), upsert=True, safe=True, multi=False, **kwargs)
+		else:
+			self._id=self.__class__._getCollection(db).insert(self._asdict(skip=["_id"]), safe=True, **kwargs)
+		return self._id
