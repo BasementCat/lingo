@@ -1,8 +1,26 @@
+import bson
+
 class ModelError(BaseException):
 	pass
 
 class ValidationError(ModelError):
 	pass
+
+class CustomCursor(object):
+	def __init__(self, wrapped, cls):
+		self.__dict__['wrapped']=wrapped
+		self.__dict__['cls']=cls
+
+	def __getattr__(self, k):
+		return getattr(self.__dict__['wrapped'], k)
+
+	def __setattr__(self, k, v):
+		return setattr(self.__dict__['wrapped'], k, v)
+
+	def __getitem__(self, i):
+		cls=self.__dict__['cls']
+		data=self.__dict__['wrapped'][i]
+		return cls(**data)
 
 class Field(object):
 	def __init__(self, ftype=None, fsubtype=None, validation=None, default=None, doc=None, cast=True):
@@ -18,9 +36,12 @@ class Field(object):
 			if not isinstance(value, ftype) and value is not None:
 				if self.cast:
 					try:
-						value=ftype(value)
+						if issubclass(ftype, Model):
+							value=ftype(**value)
+						else:
+							value=ftype(value)
 					except TypeError as e:
-						raise ValidationError(str(e))
+						raise ValidationError("%s(%s): %s"%(str(ftype), str(value), str(e)))
 				else:
 					raise ValidationError("Expected %s, got %s"%(ftype.__name__, value.__class__.__name__))
 		return value
@@ -87,8 +108,18 @@ class Model(object):
 			raise ValidationError("%s: No such attribute %s"%(self.__class__.__name__, k))
 
 	def __getattr__(self, k):
-		if isinstance(self._clsattr(k), Field):
-			return self.__dict__['__data__'][k]
+		f=self.__class__._clsattr(k)
+		if isinstance(f, Field):
+			out=self.__dict__['__data__'][k]
+			if issubclass(f.ftype, Model) and not isinstance(out, f.ftype) and out is not None:
+				#Requested field should be a model instance, but it is not - load it
+				if f.ftype._clsattr("__Embedded__"):
+					out=f.ftype(**out)
+				else:
+					#A load from the database is required.
+					pass #TODO: load from the database
+				setattr(self, k, out)
+			return out
 		else:
 			return self.__dict__[k]
 
@@ -101,7 +132,7 @@ class Model(object):
 				if v.__class__._clsattr("__Embedded__"):
 					v=v._asdict()
 				else:
-					v="%s,%s"%(v.__class__.__name__, str(v._id))
+					v=str(v._id)
 			out[k]=v
 		return out
 
@@ -113,3 +144,21 @@ class Model(object):
 		else:
 			self._id=self.__class__._getCollection(db).insert(self._asdict(skip=["_id"]), safe=True, **kwargs)
 		return self._id
+
+	@classmethod
+	def find(self, db, spec, **kwargs):
+		csr=self._getCollection(db).find(spec, **kwargs)
+		return CustomCursor(csr, self)
+
+	@classmethod
+	def one(self, db, *args, **kwargs):
+		csr=self.find(db, *args, **kwargs)
+		if csr.count()!=1:
+			raise ValidationError("Invalid result count for one(): expected exactly one, got %d"%(csr.count(),))
+		return csr[0]
+
+	@classmethod
+	def get(self, db, idstr):
+		if not isinstance(idstr, bson.ObjectId):
+			idstr=bson.ObjectId(idstr)
+		return self.one(db, {"_id": idstr})
