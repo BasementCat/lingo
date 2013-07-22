@@ -1,5 +1,5 @@
 import unittest, pymongo, bson
-import lingo
+from lingo import lingo
 
 class SampleEmbeddedModel(lingo.Model):
 	class __Prototype__:
