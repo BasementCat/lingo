@@ -1,3 +1,5 @@
+import os
+
 from setuptools import setup
 
 # Using vbox, hard links do not work
