@@ -1,5 +1,9 @@
 from setuptools import setup
 
+# Using vbox, hard links do not work
+if os.environ.get('USER','') == 'vagrant':
+    del os.link
+
 setup(
 	name='lingo',
 	version='0.2',
