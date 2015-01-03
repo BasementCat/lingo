@@ -1,7 +1,6 @@
 import bson
 
 from errors import *
-from database import MongoDBCustomCursor
 
 class Field(object):
 	def __init__(self, ftype=None, fsubtype=None, validation=None, default=None, doc=None, cast=True):
