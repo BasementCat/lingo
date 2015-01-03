@@ -164,6 +164,19 @@ class CouchDB(Base):
             else:
                 raise e
 
+    def find(self, model, view, keys = None):
+        # TODO: limit, offset
+        method = 'GET'
+        body = None
+        headers = {}
+        if keys:
+            body = json.dumps({'keys': keys if isinstance(keys, list) else [keys]})
+            method = 'POST'
+            headers = {'Content-type': 'application/json'}
+        res = self._request_db(method, '/_design/' + model.get_type_name() + '/_view/' + view, {'include_docs': 'true'}, body, headers).parsed_body
+        # res looks like: {offset: 0, total_rows: 100, rows: [{doc: {document data}, id: foobar, key: returnedkey, value: emittedvalue}, ...]}
+        return [model(**row['doc']) for row in res['rows']]
+
     def sync_views(self):
         docs = {}
         for model in lingo.Model.__subclasses__():

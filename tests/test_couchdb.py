@@ -62,17 +62,52 @@ class TestCouchDB(unittest.TestCase):
 		self.assertIsNotNone(i._rev)
 		self.tempid=i._id
 
-	# def test_FindExisting(self):
-	# 	i=SampleModel(strField="foobar")
-	# 	self.db.save(i)
-	# 	tempid=i._id
-		
-	# 	del(i)
-	# 	i=self.db.find(SampleModel, {"_id": bson.ObjectId(tempid)})[0]
-	# 	self.assertIsNotNone(i._id)
-	# 	self.assertEquals(tempid, i._id)
-	# 	self.assertEquals(i.strField, u"foobar")
+	def test_FindAll(self):
+		for v in ["foo", "foo", "bar", "baz"]:
+			i=SampleModel(strField=v)
+			self.db.save(i)
 
+		res = self.db.find(SampleModel, 'getByStrField')
+		self.assertEquals(4, len(res))
+
+	def test_FindOneKey(self):
+		for v in ["foo", "foo", "bar", "baz"]:
+			i=SampleModel(strField=v)
+			self.db.save(i)
+
+		res = self.db.find(SampleModel, 'getByStrField', 'foo')
+		self.assertEquals(2, len(res))
+		for obj in res:
+			self.assertEquals('foo', obj.strField)
+
+		res = self.db.find(SampleModel, 'getByStrField', 'bar')
+		self.assertEquals(1, len(res))
+		for obj in res:
+			self.assertEquals('bar', obj.strField)
+
+		res = self.db.find(SampleModel, 'getByStrField', 'baz')
+		self.assertEquals(1, len(res))
+		for obj in res:
+			self.assertEquals('baz', obj.strField)
+
+	def test_FindMultipleKeys(self):
+		for v in ["foo", "foo", "bar", "baz"]:
+			i=SampleModel(strField=v)
+			self.db.save(i)
+
+		res = self.db.find(SampleModel, 'getByStrField', ['foo', 'bar'])
+		self.assertEquals(3, len(res))
+		for obj in res:
+			self.assertTrue(obj.strField in ['foo', 'bar'])
+
+	def test_FindMissing(self):
+		res = self.db.find(SampleModel, 'getByStrField', 'notarealkey')
+		self.assertEquals(0, len(res))
+
+	def test_FindMissingView(self):
+		with self.assertRaises(lingo.DatabaseError):
+			res = self.db.find(SampleModel, 'notarealview')
+		
 	def test_GetMissing(self):
 		with self.assertRaises(lingo.NotFoundError):
 			i = self.db.get(SampleModel, "thisiddoesnotexistever")
