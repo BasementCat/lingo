@@ -18,16 +18,29 @@ class SampleModel(lingo.Model):
 		strField=lingo.Field(unicode, default=u"")
 		embedField=lingo.Field(SampleEmbeddedModel, default=SampleEmbeddedModel)
 
+		__Views__ = {
+			'getByStrField': {
+				'map': """\
+					function(doc) {
+						if (doc.type == "SampleModel") {
+							emit(doc.strField, doc.id);
+						}
+					}
+				"""
+			}
+		}
+
 SampleModel.__Prototype__.linkField=lingo.Field(SampleModel, default=None, cast=False)
 
 class TestCouchDB(unittest.TestCase):
 	def setUp(self):
-		self.db = database.CouchDB('http://localhost', 'lingo-test')
+		self.db = database.CouchDB('http://localhost', 'lingo-test', sync_views = False)
 		try:
 			self.db.delete_db('lingo-test')
 		except:
 			pass
 		self.db.create_db('lingo-test')
+		self.db.sync_views()
 
 	def test_CannotSaveEmbeddedModels(self):
 		i=SampleEmbeddedModel()

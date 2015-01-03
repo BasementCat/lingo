@@ -8,6 +8,7 @@ import pymongo
 import bson
 
 from errors import *
+import lingo
 
 class Base(object):
     @classmethod
@@ -70,7 +71,7 @@ class MongoDB(Base):
         return model_instance._id
 
 class CouchDB(Base):
-    def __init__(self, host, dbname):
+    def __init__(self, host, dbname, sync_views = True):
         res = urlparse(host)
         if res.scheme != 'http':
             raise NotImplementedError("Only the HTTP scheme is supported")
@@ -89,6 +90,9 @@ class CouchDB(Base):
         server_info = self._request('GET', '/').parsed_body
         assert 'couchdb' in server_info
         assert server_info['couchdb'] == 'Welcome'
+
+        if sync_views:
+            self.sync_views()
 
     def _request(self, method, url, query = {}, body = None, headers = {}):
         real_headers = {}
@@ -150,9 +154,41 @@ class CouchDB(Base):
     def get(self, model, _id):
         try:
             data = self._request_db('GET', '/' + _id).parsed_body
-            return model(**data)
+            if model is None:
+                return data
+            else:
+                return model(**data)
         except DatabaseError as e:
             if e.response.status == 404:
-                raise NotFoundError("Not found: %s == %s" % (model.__class__.__name__, _id))
+                raise NotFoundError("Not found: %s == %s" % (model.__class__.__name__ if model else '[None]', _id))
             else:
                 raise e
+
+    def sync_views(self):
+        docs = {}
+        for model in lingo.Model.__subclasses__():
+            views = model._clsattr('__Views__')
+            if views:
+                id_ = '_design/' + model.get_type_name()
+                if id_ not in docs:
+                    docs[id_] = {'views': {}}
+                docs[id_]['views'].update(views)
+
+        # In order to update we need a _rev so let's get that
+        for id_ in docs.keys():
+            try:
+                realdoc = self.get(None, id_)
+                docs[id_]['_rev'] = realdoc['_rev']
+            except NotFoundError:
+                pass
+
+        # Put the results
+        for id_, doc in docs.items():
+            if doc and len(doc):
+                res = self._request_db(
+                    'PUT',
+                    '/' + id_,
+                    {},
+                    json.dumps(doc),
+                    {'Content-type': 'application/json'}
+                ).parsed_body
