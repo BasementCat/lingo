@@ -82,15 +82,19 @@ class CouchDB(Base):
         self.port = res.port or 5984
         self.dbname = dbname
 
+        self.default_headers = {'Connection': 'keep-alive'}
         self.conn = httplib.HTTPConnection(self.host, self.port)
         self.conn.connect()
 
-        server_info = self._request('GET', '/')
+        server_info = self._request('GET', '/').parsed_body
         assert 'couchdb' in server_info
-        assert server_info['couchdb'] == 'welcome'
+        assert server_info['couchdb'] == 'Welcome'
 
     def _request(self, method, url, query = {}, body = None, headers = {}):
-        self.conn.request(method, url + '?' + urllib.urlencode(query), body, headers)
+        real_headers = {}
+        real_headers.update(self.default_headers)
+        real_headers.update(headers)
+        self.conn.request(method, url + '?' + urllib.urlencode(query), body, real_headers)
         res = self.conn.getresponse()
         if res.status < 200 or res.status >= 400:
             ex = DatabaseError("%d %s" % (res.status, res.reason))
@@ -113,18 +117,29 @@ class CouchDB(Base):
         return self._request('DELETE', '/' + dbname)
 
     def _get_uuids(self, count = 1):
-        return self._request('GET', '/_uuids', dict(count = count))['uuids']
+        return self._request('GET', '/_uuids', dict(count = count)).parsed_body['uuids']
 
     def save(self, model_instance):
+        if model_instance.__class__._clsattr("__Embedded__"):
+            raise ModelError("Model %s is embedded and cannot be saved"%(model_instance.__class__.__name__,))
+        skip = ['_id']
         _id = model_instance._id
+        headers = {'Content-type': 'application/json'}
         if not _id:
-            _id = self._get_uuids()[0]
-
-        res = self._request_db('PUT', '/' + _id, {}, json.dumps(model_instance._asdict(skip = ['_id'])))
+            skip.append('_rev')
+            res = self._request_db('POST', '/', {}, json.dumps(model_instance._asdict(skip = skip)), headers).parsed_body
+        else:
+            res = self._request_db('PUT', '/' + _id, {}, json.dumps(model_instance._asdict(skip = skip)), headers).parsed_body
         model_instance._id = res['id']
         model_instance._rev = res['rev']
         return model_instance._id
 
     def get(self, model, _id):
-        data = self._request_db('GET', '/' + _id)
-        return model(**data)
+        try:
+            data = self._request_db('GET', '/' + _id).parsed_body
+            return model(**data)
+        except DatabaseError as e:
+            if e.response.status == 404:
+                raise NotFoundError("Not found: %s == %s" % (model.__class__.__name__, _id))
+            else:
+                raise e

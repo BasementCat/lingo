@@ -4,6 +4,9 @@ class LingoError(Exception):
 class DatabaseError(LingoError):
     pass
 
+class NotFoundError(DatabaseError):
+    pass
+
 class ModelError(LingoError):
     pass
 
