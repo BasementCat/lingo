@@ -1,4 +1,4 @@
 lingo
 =====
 
-A simple MongoDB ORM for Python
+A simple MongoDB/CouchDB ORM for Python

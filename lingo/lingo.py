@@ -1,26 +1,7 @@
 import bson
 
-class ModelError(BaseException):
-	pass
-
-class ValidationError(ModelError):
-	pass
-
-class CustomCursor(object):
-	def __init__(self, wrapped, cls):
-		self.__dict__['wrapped']=wrapped
-		self.__dict__['cls']=cls
-
-	def __getattr__(self, k):
-		return getattr(self.__dict__['wrapped'], k)
-
-	def __setattr__(self, k, v):
-		return setattr(self.__dict__['wrapped'], k, v)
-
-	def __getitem__(self, i):
-		cls=self.__dict__['cls']
-		data=self.__dict__['wrapped'][i]
-		return cls(**data)
+from errors import *
+from database import MongoDBCustomCursor
 
 class Field(object):
 	def __init__(self, ftype=None, fsubtype=None, validation=None, default=None, doc=None, cast=True):
@@ -77,10 +58,6 @@ class Model(object):
 			raise ModelError("Model %s lacks a prototype"%(self.__name__,))
 
 	@classmethod
-	def _getCollection(self, db):
-		return db[self._clsattr("__Collection__") or self.__name__]
-
-	@classmethod
 	def _fields(self):
 		if hasattr(self, "__Prototype__"):
 			return {k:v for k,v in self.__Prototype__.__dict__.items() if isinstance(v, Field)}
@@ -135,30 +112,3 @@ class Model(object):
 					v=str(v._id)
 			out[k]=v
 		return out
-
-	def save(self, db, **kwargs):
-		if self.__class__._clsattr("__Embedded__"):
-			raise ModelError("Model %s is embedded and cannot be saved"%(self.__class__.__name__,))
-		if self._id:
-			self.__class__._getCollection(db).update({"_id": self._id}, self._asdict(skip=["_id"]), upsert=True, safe=True, multi=False, **kwargs)
-		else:
-			self._id=self.__class__._getCollection(db).insert(self._asdict(skip=["_id"]), safe=True, **kwargs)
-		return self._id
-
-	@classmethod
-	def find(self, db, spec, **kwargs):
-		csr=self._getCollection(db).find(spec, **kwargs)
-		return CustomCursor(csr, self)
-
-	@classmethod
-	def one(self, db, *args, **kwargs):
-		csr=self.find(db, *args, **kwargs)
-		if csr.count()!=1:
-			raise ValidationError("Invalid result count for one(): expected exactly one, got %d"%(csr.count(),))
-		return csr[0]
-
-	@classmethod
-	def get(self, db, idstr):
-		if not isinstance(idstr, bson.ObjectId):
-			idstr=bson.ObjectId(idstr)
-		return self.one(db, {"_id": idstr})

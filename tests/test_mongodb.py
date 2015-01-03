@@ -1,5 +1,5 @@
 import unittest, pymongo, bson
-from lingo import lingo
+from lingo import lingo, database
 
 class SampleEmbeddedModel(lingo.Model):
 	class __Prototype__:
@@ -20,6 +20,7 @@ class TestLingo(unittest.TestCase):
 		self.conn=pymongo.Connection("localhost")
 		self.db=self.conn["lingo-test"]
 		self.db.SampleModel.remove()
+		self.mdb = database.MongoDB(self.conn, 'lingo-test')
 
 	def test_FieldValidationWithCasting(self):
 		f=lingo.Field(int, default=0)
@@ -77,21 +78,21 @@ class TestLingo(unittest.TestCase):
 		self.assertEquals(i.embedField.intField, 12)
 
 	def test_getDefaultCollection(self):
-		self.assertEquals(SampleModel._getCollection(self.db), self.db["SampleModel"])
+		self.assertEquals(self.mdb._getCollection(SampleModel), self.db["SampleModel"])
 
 	def test_getExplicitCollection(self):
 		SampleModel.__Prototype__.__Collection__="foobar"
-		self.assertEquals(SampleModel._getCollection(self.db), self.db["foobar"])
+		self.assertEquals(self.mdb._getCollection(SampleModel), self.db["foobar"])
 		del(SampleModel.__Prototype__.__Collection__)
 
 	def test_CannotSaveEmbeddedModels(self):
 		i=SampleEmbeddedModel()
 		with self.assertRaises(lingo.ModelError):
-			i.save(self.db)
+			self.mdb.save(i)
 
 	def test_NewObjectId(self):
 		i=SampleModel()
-		i.save(self.db)
+		self.mdb.save(i)
 		self.assertIsInstance(i._id, bson.ObjectId)
 		self.assertGreater(len(str(i._id)), 0)
 
@@ -99,70 +100,70 @@ class TestLingo(unittest.TestCase):
 		i=SampleModel()
 		i.strField="foobar"
 		self.assertIsNone(i._id)
-		i.save(self.db)
+		self.mdb.save(i)
 		self.assertIsNotNone(i._id)
 		self.tempid=str(i._id)
 
 	def test_FindExisting(self):
 		i=SampleModel(strField="foobar")
-		i.save(self.db)
+		self.mdb.save(i)
 		tempid=str(i._id)
 		
 		del(i)
-		i=SampleModel.find(self.db, {"_id": bson.ObjectId(tempid)})[0]
+		i=self.mdb.find(SampleModel, {"_id": bson.ObjectId(tempid)})[0]
 		self.assertIsNotNone(i._id)
 		self.assertEquals(tempid, str(i._id))
 		self.assertEquals(i.strField, u"foobar")
 
 	def test_FindOneExisting(self):
 		i=SampleModel(strField="foobar")
-		i.save(self.db)
+		self.mdb.save(i)
 		tempid=str(i._id)
 		
 		del(i)
-		i=SampleModel.one(self.db, {"_id": bson.ObjectId(tempid)})
+		i=self.mdb.one(SampleModel, {"_id": bson.ObjectId(tempid)})
 		self.assertIsNotNone(i._id)
 		self.assertEquals(tempid, str(i._id))
 		self.assertEquals(i.strField, u"foobar")
 
 	def test_FindOneMissingExisting(self):
 		i=SampleModel(strField="foobar")
-		i.save(self.db)
+		self.mdb.save(i)
 		tempid=str(i._id)
 		
 		del(i)
 		with self.assertRaises(lingo.ValidationError):
-			i=SampleModel.one(self.db, {"_id": bson.ObjectId()})
+			i=self.mdb.one(SampleModel, {"_id": bson.ObjectId()})
 
 	def test_GetExistingWithBSONID(self):
 		i=SampleModel(strField="foobar")
-		i.save(self.db)
+		self.mdb.save(i)
 		tempid=str(i._id)
 		
 		del(i)
-		i=SampleModel.get(self.db, bson.ObjectId(tempid))
+		i=self.mdb.get(SampleModel, bson.ObjectId(tempid))
 		self.assertIsNotNone(i._id)
 		self.assertEquals(tempid, str(i._id))
 		self.assertEquals(i.strField, u"foobar")
 
 	def test_GetExistingWithString(self):
 		i=SampleModel(strField="foobar")
-		i.save(self.db)
+		self.mdb.save(i)
 		tempid=str(i._id)
 		
 		del(i)
-		i=SampleModel.get(self.db, tempid)
+		i=self.mdb.get(SampleModel, tempid)
 		self.assertIsNotNone(i._id)
 		self.assertEquals(tempid, str(i._id))
 		self.assertEquals(i.strField, u"foobar")
 
 	def test_SaveExisting(self):
 		i=SampleModel(strField="foobar")
-		i.save(self.db)
+		self.mdb.save(i)
 		tempid=str(i._id)
 		del(i)
-		i=SampleModel.find(self.db, {"_id": bson.ObjectId(tempid)})[0]
-		i.save(self.db)
+		i=self.mdb.find(SampleModel, {"_id": bson.ObjectId(tempid)})[0]
+		self.mdb.save(i)
 		self.assertEquals(tempid, str(i._id))
 
 if __name__=="__main__":
