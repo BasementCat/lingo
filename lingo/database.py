@@ -125,11 +125,24 @@ class CouchDB(Base):
         skip = ['_id']
         _id = model_instance._id
         headers = {'Content-type': 'application/json'}
+        typename = model_instance.__class__._clsattr("__Type__") or model_instance.__class__._clsattr("__Collection__") or model_instance.__class__.__name__
         if not _id:
             skip.append('_rev')
-            res = self._request_db('POST', '/', {}, json.dumps(model_instance._asdict(skip = skip)), headers).parsed_body
+            res = self._request_db(
+                'POST',
+                '/',
+                {},
+                json.dumps(model_instance._asdict(skip = skip, extra = {'type': typename})),
+                headers
+            ).parsed_body
         else:
-            res = self._request_db('PUT', '/' + _id, {}, json.dumps(model_instance._asdict(skip = skip)), headers).parsed_body
+            res = self._request_db(
+                'PUT',
+                '/' + _id,
+                {},
+                json.dumps(model_instance._asdict(skip = skip, extra = {'type': typename})),
+                headers
+            ).parsed_body
         model_instance._id = res['id']
         model_instance._rev = res['rev']
         return model_instance._id

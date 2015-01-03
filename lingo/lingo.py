@@ -99,7 +99,7 @@ class Model(object):
 		else:
 			return self.__dict__[k]
 
-	def _asdict(self, skip=None):
+	def _asdict(self, skip=None, extra = {}):
 		out={}
 		for k,v in self.__dict__['__data__'].items():
 			if skip and k in skip:
@@ -110,4 +110,5 @@ class Model(object):
 				else:
 					v=str(v._id)
 			out[k]=v
+		out.update(extra)
 		return out
