@@ -13,6 +13,7 @@ class SampleEmbeddedModel(lingo.Model):
 
 class SampleModel(lingo.Model):
 	class __Prototype__:
+		__Database__ = 'CouchDB'
 		_id=lingo.Field(unicode)
 		_rev=lingo.Field(unicode)
 		strField=lingo.Field(unicode, default=u"")
@@ -34,6 +35,7 @@ SampleModel.__Prototype__.linkField=lingo.Field(SampleModel, default=None, cast=
 
 class TestCouchDB(unittest.TestCase):
 	def setUp(self):
+		database.Database.instances = {}
 		self.db = database.CouchDB('http://localhost', 'lingo-test', sync_views = False)
 		try:
 			self.db.delete_db('lingo-test')
@@ -45,11 +47,11 @@ class TestCouchDB(unittest.TestCase):
 	def test_CannotSaveEmbeddedModels(self):
 		i=SampleEmbeddedModel()
 		with self.assertRaises(lingo.ModelError):
-			self.db.save(i)
+			i.database().save()
 
 	def test_NewObjectId(self):
 		i=SampleModel()
-		self.db.save(i)
+		i.database().save()
 		self.assertGreater(len(i._id), 0)
 		self.assertGreater(len(i._rev), 0)
 
@@ -57,7 +59,7 @@ class TestCouchDB(unittest.TestCase):
 		i=SampleModel()
 		i.strField="foobar"
 		self.assertIsNone(i._id)
-		self.db.save(i)
+		i.database().save()
 		self.assertIsNotNone(i._id)
 		self.assertIsNotNone(i._rev)
 		self.tempid=i._id
@@ -65,27 +67,27 @@ class TestCouchDB(unittest.TestCase):
 	def test_FindAll(self):
 		for v in ["foo", "foo", "bar", "baz"]:
 			i=SampleModel(strField=v)
-			self.db.save(i)
+			i.database().save()
 
-		res = self.db.find(SampleModel, 'getByStrField')
+		res = SampleModel.database().find('getByStrField')
 		self.assertEquals(4, len(res))
 
 	def test_FindOneKey(self):
 		for v in ["foo", "foo", "bar", "baz"]:
 			i=SampleModel(strField=v)
-			self.db.save(i)
+			i.database().save()
 
-		res = self.db.find(SampleModel, 'getByStrField', 'foo')
+		res = SampleModel.database().find('getByStrField', 'foo')
 		self.assertEquals(2, len(res))
 		for obj in res:
 			self.assertEquals('foo', obj.strField)
 
-		res = self.db.find(SampleModel, 'getByStrField', 'bar')
+		res = SampleModel.database().find('getByStrField', 'bar')
 		self.assertEquals(1, len(res))
 		for obj in res:
 			self.assertEquals('bar', obj.strField)
 
-		res = self.db.find(SampleModel, 'getByStrField', 'baz')
+		res = SampleModel.database().find('getByStrField', 'baz')
 		self.assertEquals(1, len(res))
 		for obj in res:
 			self.assertEquals('baz', obj.strField)
@@ -93,33 +95,33 @@ class TestCouchDB(unittest.TestCase):
 	def test_FindMultipleKeys(self):
 		for v in ["foo", "foo", "bar", "baz"]:
 			i=SampleModel(strField=v)
-			self.db.save(i)
+			i.database().save()
 
-		res = self.db.find(SampleModel, 'getByStrField', ['foo', 'bar'])
+		res = SampleModel.database().find('getByStrField', ['foo', 'bar'])
 		self.assertEquals(3, len(res))
 		for obj in res:
 			self.assertTrue(obj.strField in ['foo', 'bar'])
 
 	def test_FindMissing(self):
-		res = self.db.find(SampleModel, 'getByStrField', 'notarealkey')
+		res = SampleModel.database().find('getByStrField', 'notarealkey')
 		self.assertEquals(0, len(res))
 
 	def test_FindMissingView(self):
 		with self.assertRaises(lingo.DatabaseError):
-			res = self.db.find(SampleModel, 'notarealview')
+			res = SampleModel.database().find('notarealview')
 		
 	def test_GetMissing(self):
 		with self.assertRaises(lingo.NotFoundError):
-			i = self.db.get(SampleModel, "thisiddoesnotexistever")
+			i = SampleModel.database().get("thisiddoesnotexistever")
 			self.assertIsNone(i)
 
 	def test_GetExistingWithString(self):
 		i=SampleModel(strField="foobar")
-		self.db.save(i)
+		i.database().save()
 		tempid=i._id
 		
 		del(i)
-		i=self.db.get(SampleModel, tempid)
+		i=SampleModel.database().get(tempid)
 		self.assertIsNotNone(i._id)
 		self.assertIsNotNone(i._rev)
 		self.assertEquals(tempid, i._id)
@@ -127,10 +129,10 @@ class TestCouchDB(unittest.TestCase):
 
 	def test_SaveExisting(self):
 		i=SampleModel(strField="foobar")
-		self.db.save(i)
+		i.database().save()
 		tempid=i._id
 		del(i)
-		i=self.db.get(SampleModel, tempid)
+		i=SampleModel.database().get(tempid)
 		self.assertEquals(tempid, i._id)
 
 	def test_MassOperation(self):
@@ -154,7 +156,7 @@ class TestCouchDB(unittest.TestCase):
 
 		for obj in objs:
 			ts = time.time()
-			temp = self.db.get(SampleModel, obj._id)
+			temp = SampleModel.database().get(obj._id)
 			t_get += time.time() - ts
 
 		t_duration = time.time() - t_start

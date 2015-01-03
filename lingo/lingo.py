@@ -1,6 +1,23 @@
+import functools
+import inspect
+
 import bson
 
 from errors import *
+import database
+
+class combomethod(object):
+    def __init__(self, method):
+        self.method = method
+
+    def __get__(self, obj=None, objtype=None):
+        @functools.wraps(self.method)
+        def _wrapper(*args, **kwargs):
+            if obj is not None:
+                return self.method(obj, *args, **kwargs)
+            else:
+                return self.method(objtype, *args, **kwargs)
+        return _wrapper
 
 class Field(object):
 	def __init__(self, ftype=None, fsubtype=None, validation=None, default=None, doc=None, cast=True):
@@ -55,6 +72,17 @@ class Model(object):
 				return None
 		else:
 			raise ModelError("Model %s lacks a prototype"%(self.__name__,))
+
+	@combomethod
+	def database(self):
+		if self is not Model:
+			if hasattr(self, '_database'):
+				return database.DatabasePartial(self, self._database)
+		cls = self if inspect.isclass(self) and issubclass(self, Model) else self.__class__
+		db_string = cls._clsattr('__Database__')
+		if db_string is None:
+			raise ModelError("The prototype of class '%s' does not define __Database__" % (cls.__name__,))
+		return database.DatabasePartial(self, database.Database.get_instance(db_string))
 
 	@classmethod
 	def _fields(self):

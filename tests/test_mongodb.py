@@ -17,6 +17,7 @@ SampleModel.__Prototype__.linkField=lingo.Field(SampleModel, default=None, cast=
 
 class TestMongoDB(unittest.TestCase):
 	def setUp(self):
+		database.Database.instances = {}
 		self.conn=pymongo.Connection("localhost")
 		self.db=self.conn["lingo-test"]
 		self.db.SampleModel.remove()

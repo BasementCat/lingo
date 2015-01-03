@@ -3,6 +3,7 @@ import httplib
 import urllib
 import json
 from urlparse import urlparse
+import types
 
 import pymongo
 import bson
@@ -10,7 +11,9 @@ import bson
 from errors import *
 import lingo
 
-class Base(object):
+class Database(object):
+    instances = {}
+
     @classmethod
     def from_host(self, host, dbname):
         if re.match(ur'^mongodb://', host):
@@ -20,6 +23,46 @@ class Base(object):
             return CouchDB(host, dbname)
         else:
             raise DatabaseError("Invalid protocol, could not determine the type of database")
+
+    def __init__(self, name = None):
+        name_ = name or 'default'
+        cls = self.__class__.__name__
+        if cls not in self.instances:
+            self.instances[cls] = {}
+
+        if name_ in self.instances[cls]:
+            raise DatabaseError("A '%s' instance with the name '%s' already exists" % (cls, name_))
+
+        self.instances[cls][name_] = self
+
+    @classmethod
+    def get_instance(self, cls, name = None):
+        cls_ = None
+        name_ = None
+        if name is None and '/' in cls:
+            cls_, name_ = cls.split('/')
+        else:
+            cls_ = cls
+            name_ = name or 'default'
+        if cls_ not in self.instances:
+            raise DatabaseError("No instances of '%s' exist" % (cls_,))
+        if name_ not in self.instances[cls_]:
+            raise DatabaseError("The '%s' instance '%s' does not exist" % (cls_, name_))
+        return self.instances[cls_][name_]
+
+class DatabasePartial(object):
+    def __init__(self, model_or_instance, db_instance):
+        self.model_or_instance = model_or_instance
+        self.db_instance = db_instance
+
+    def __getattr__(self, attrname):
+        attr = getattr(self.db_instance, attrname)
+        if isinstance(attr, types.MethodType):
+            def _wrap(*args, **kwargs):
+                return attr(self.model_or_instance, *args, **kwargs)
+            return _wrap
+        else:
+            return attr
 
 class MongoDBCustomCursor(object):
     def __init__(self, wrapped, cls):
@@ -37,8 +80,9 @@ class MongoDBCustomCursor(object):
         data=self.__dict__['wrapped'][i]
         return cls(**data)
 
-class MongoDB(Base):
-    def __init__(self, server, dbname):
+class MongoDB(Database):
+    def __init__(self, server, dbname, name = None):
+        super(MongoDB, self).__init__(name)
         self.server = server
         self.dbname = dbname
         self.db = server[dbname]
@@ -70,8 +114,9 @@ class MongoDB(Base):
             model_instance._id=self._getCollection(model_instance.__class__).insert(model_instance._asdict(skip=["_id"]), safe=True, **kwargs)
         return model_instance._id
 
-class CouchDB(Base):
-    def __init__(self, host, dbname, sync_views = True):
+class CouchDB(Database):
+    def __init__(self, host, dbname, sync_views = True, name = None):
+        super(CouchDB, self).__init__(name)
         res = urlparse(host)
         if res.scheme != 'http':
             raise NotImplementedError("Only the HTTP scheme is supported")
