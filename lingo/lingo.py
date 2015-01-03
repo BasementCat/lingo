@@ -63,6 +63,10 @@ class Model(object):
 		else:
 			raise ModelError("Model %s lacks a prototype"%(self.__name__,))
 
+	@classmethod
+	def get_type_name(self):
+		return self._clsattr("__Type__") or self._clsattr("__Collection__") or self.__name__
+
 	def __init__(self, **kwargs):
 		self.__data__={}
 		for k,v in self.__class__._fields().items():

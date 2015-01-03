@@ -125,7 +125,7 @@ class CouchDB(Base):
         skip = ['_id']
         _id = model_instance._id
         headers = {'Content-type': 'application/json'}
-        typename = model_instance.__class__._clsattr("__Type__") or model_instance.__class__._clsattr("__Collection__") or model_instance.__class__.__name__
+        typename = model_instance.__class__.get_type_name()
         if not _id:
             skip.append('_rev')
             res = self._request_db(
