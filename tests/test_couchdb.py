@@ -31,7 +31,7 @@ class SampleModel(lingo.Model):
 			}
 		}
 
-SampleModel.__Prototype__.linkField=lingo.Field(SampleModel, default=None, cast=False)
+SampleModel.__Prototype__.linkField=lingo.Field(SampleModel, default=None)
 
 class TestCouchDB(unittest.TestCase):
 	def setUp(self):

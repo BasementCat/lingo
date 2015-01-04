@@ -13,7 +13,7 @@ class SampleModel(lingo.Model):
 		strField=lingo.Field(unicode, default=u"")
 		embedField=lingo.Field(SampleEmbeddedModel, default=SampleEmbeddedModel)
 
-SampleModel.__Prototype__.linkField=lingo.Field(SampleModel, default=None, cast=False)
+SampleModel.__Prototype__.linkField=lingo.Field(SampleModel, default=None)
 
 class TestMongoDB(unittest.TestCase):
 	def setUp(self):

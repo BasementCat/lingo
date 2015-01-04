@@ -13,10 +13,10 @@ class SampleModel(lingo.Model):
         strField=lingo.Field(unicode, default=u"")
         embedField=lingo.Field(SampleEmbeddedModel, default=SampleEmbeddedModel)
 
-SampleModel.__Prototype__.linkField=lingo.Field(SampleModel, default=None, cast=False)
+SampleModel.__Prototype__.linkField=lingo.Field(SampleModel, default=None)
 
 class TestFieldsModels(unittest.TestCase):
-    def test_FieldValidationWithCasting(self):
+    def test_FieldValidation(self):
         f=lingo.Field(int, default=0)
         
         self.assertEquals(f.validate(3), 3)
@@ -24,16 +24,6 @@ class TestFieldsModels(unittest.TestCase):
         self.assertEquals(f.validate(-23874), -23874)
         self.assertEquals(f.validate("12"), 12)
         self.assertEquals(f.validate(True), 1)
-
-    def test_FieldValidationNoCasting(self):
-        f=lingo.Field(int, default=0, cast=False)
-
-        self.assertEquals(f.validate(3), 3)
-        self.assertEquals(f.validate(250), 250)
-        self.assertEquals(f.validate(-23874), -23874)
-        
-        with self.assertRaises(lingo.ValidationError):
-            f.validate("12")
 
     def _numInRange(self, minimum, maximum):
         def _internal(num):

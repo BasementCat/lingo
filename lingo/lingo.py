@@ -1,7 +1,11 @@
 import functools
 import inspect
+from datetime import datetime
 
 import bson
+
+from dateutil.parser import parse
+import pytz
 
 from errors import *
 import database
@@ -20,40 +24,69 @@ class combomethod(object):
         return _wrapper
 
 class Field(object):
-	def __init__(self, ftype=None, fsubtype=None, validation=None, default=None, doc=None, cast=True):
+	def __init__(self, ftype=None, fsubtype=None, validation=None, default=None, doc=None):
 		self.ftype=ftype
 		self.fsubtype=fsubtype
 		self.validation=validation
 		self.default=default
 		self.doc=doc
-		self.cast=cast
 
-	def _validate(self, ftype, value):
-		if ftype is not None:
-			if not isinstance(value, ftype) and value is not None:
-				if self.cast:
-					try:
-						if issubclass(ftype, Model):
-							value=ftype(**value)
-						else:
-							value=ftype(value)
-					except TypeError as e:
-						raise ValidationError("%s(%s): %s"%(str(ftype), str(value), str(e)))
-				else:
-					raise ValidationError("Expected %s, got %s"%(ftype.__name__, value.__class__.__name__))
+	@classmethod
+	def _scalar_to_python(self, ftype, value):
+		# ftype and value must not be None
+		if isinstance(value, ftype):
+			return value
+		elif isinstance(ftype, Field):
+			return ftype._to_python(value)
+		elif issubclass(ftype, Model):
+			return ftype(**value)
+		elif issubclass(ftype, datetime):
+			return parse(str(value))
+		else:
+			return ftype(value)
+
+	def _to_python(self, value_):
+		value = value_
+		if self.ftype is not None and value is not None:
+			if issubclass(self.ftype, list):
+				value = value if isinstance(value, list) else [value]
+				value = [self._scalar_to_python(self.fsubtype, v) for v in value]
+			elif issubclass(self.ftype, dict):
+				value = value if isinstance(value, dict) else {str(value): value}
+				value = {k:self._scalar_to_python(self.fsubtype, v) for k,v in value.items()}
+			else:
+				value = self._scalar_to_python(self.ftype, value)
 		return value
 
-	def validate(self, value):
-		if issubclass(self.ftype, list):
-			self._validate(self.ftype, value)
-			value=[self._validate(self.fsubtype, v) for v in value]
-			if self.validation:
-				for v in value:
-					self.validation(v) #Should raise ValidationError on failure
+	@classmethod
+	def _scalar_to_json(self, ftype, value):
+		# ftype and value must not be None
+		if isinstance(ftype, Field):
+			return ftype._to_json(value)
+		elif issubclass(ftype, Model):
+			return value._to_json()
+		elif issubclass(ftype, datetime):
+			if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+				value = value.replace(tzinfo = pytz.timezone('UTC'))
+			return value.isoformat()
 		else:
-			value=self._validate(self.ftype, value)
-			if self.validation:
-				self.validation(value)
+			return value
+
+	def _to_json(self, value_):
+		value = value_
+		if self.ftype is not None and value is not None:
+			if issubclass(self.ftype, list):
+				value = [self._scalar_to_json(self.fsubtype, v) for v in value]
+			elif issubclass(self.ftype, dict):
+				value = {k:self._scalar_to_json(self.fsubtype, v) for k,v in value.items()}
+			else:
+				value = self._scalar_to_json(self.ftype, value)
+		return value
+
+	def validate(self, value_):
+		value = self._to_python(value_)
+		if self.validation:
+			self.validation(value) #Should raise ValidationError on failure
 		return value
 
 class Model(object):
@@ -131,7 +164,7 @@ class Model(object):
 		else:
 			return self.__dict__[k]
 
-	def _asdict(self, skip=None, extra = {}):
+	def _as_json(self, skip=None, extra = {}):
 		out={}
 		for k,v in self.__dict__['__data__'].items():
 			if skip and k in skip:
@@ -144,3 +177,6 @@ class Model(object):
 			out[k]=v
 		out.update(extra)
 		return out
+
+	def _asdict(self, skip=None, extra = {}):
+		return self._as_json(skip, extra)

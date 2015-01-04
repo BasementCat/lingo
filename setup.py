@@ -8,7 +8,7 @@ if os.environ.get('USER','') == 'vagrant':
 
 setup(
 	name='lingo',
-	version='0.3',
+	version='0.4',
 	description='A simple MongoDB/CouchDB ORM for Python',
 	long_description='',
 	classifiers=[
@@ -27,8 +27,8 @@ setup(
 	author_email='basementcat@basementcat.net',
 	license='',
 	packages=['lingo'],
-	install_requires=['pymongo', 'couchdb'],
+	install_requires=['pymongo', 'couchdb', 'python-dateutil', 'pytz'],
 	test_suite='nose.collector',
-	tests_require=['nose', 'pymongo', 'couchdb'],
+	tests_require=['nose'],
 	zip_safe=False
 )
