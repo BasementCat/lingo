@@ -34,7 +34,7 @@ class Field(object):
 	@classmethod
 	def _scalar_to_python(self, ftype, value):
 		# ftype and value must not be None
-		if isinstance(value, ftype):
+		if inspect.isclass(ftype) and isinstance(value, ftype):
 			return value
 		elif isinstance(ftype, Field):
 			return ftype._to_python(value)
@@ -64,7 +64,10 @@ class Field(object):
 		if isinstance(ftype, Field):
 			return ftype._to_json(value)
 		elif issubclass(ftype, Model):
-			return value._to_json()
+			if ftype._clsattr('__Embedded__'):
+				return value._to_json()
+			else:
+				return str(value._id)
 		elif issubclass(ftype, datetime):
 			if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
 				value = value.replace(tzinfo = pytz.timezone('UTC'))
@@ -164,19 +167,14 @@ class Model(object):
 		else:
 			return self.__dict__[k]
 
-	def _as_json(self, skip=None, extra = {}):
+	def _to_json(self, skip=None, extra = {}):
 		out={}
 		for k,v in self.__dict__['__data__'].items():
 			if skip and k in skip:
 				continue
-			if isinstance(v, Model):
-				if v.__class__._clsattr("__Embedded__"):
-					v=v._asdict()
-				else:
-					v=str(v._id)
-			out[k]=v
+			out[k] = self._clsattr(k)._to_json(v)
 		out.update(extra)
 		return out
 
 	def _asdict(self, skip=None, extra = {}):
-		return self._as_json(skip, extra)
+		return self._to_json(skip, extra)

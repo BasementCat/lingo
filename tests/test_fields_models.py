@@ -15,6 +15,10 @@ class SampleModel(lingo.Model):
 
 SampleModel.__Prototype__.linkField=lingo.Field(SampleModel, default=None)
 
+class SampleNestedModel(lingo.Model):
+    class __Prototype__:
+        nestedField = lingo.Field(dict, lingo.Field(list, SampleEmbeddedModel))
+
 class TestFieldsModels(unittest.TestCase):
     def test_FieldValidation(self):
         f=lingo.Field(int, default=0)
@@ -60,3 +64,50 @@ class TestFieldsModels(unittest.TestCase):
         i=SampleModel()
         i.embedField.intField="12"
         self.assertEquals(i.embedField.intField, 12)
+
+    def test_NestedToPython(self):
+        i = SampleNestedModel(
+            nestedField = dict(
+                foo = [
+                    dict(
+                        strField = 'foo',
+                        intField = 3
+                    )
+                ],
+                bar = [
+                    dict(
+                        strField = 'bar',
+                        intField = 5
+                    )
+                ]
+            )
+        )
+
+        self.assertEquals('foo', i.nestedField['foo'][0].strField)
+        self.assertEquals(3, i.nestedField['foo'][0].intField)
+        self.assertEquals('bar', i.nestedField['bar'][0].strField)
+        self.assertEquals(5, i.nestedField['bar'][0].intField)
+
+    def test_NestedToJson(self):
+        i = SampleNestedModel(
+            nestedField = dict(
+                foo = [
+                    dict(
+                        strField = 'foo',
+                        intField = 3
+                    )
+                ],
+                bar = [
+                    dict(
+                        strField = 'bar',
+                        intField = 5
+                    )
+                ]
+            )
+        )
+        i = i._to_json()
+
+        self.assertEquals('foo', i['nestedField']['foo'][0]['strField'])
+        self.assertEquals(3, i['nestedField']['foo'][0]['intField'])
+        self.assertEquals('bar', i['nestedField']['bar'][0]['strField'])
+        self.assertEquals(5, i['nestedField']['bar'][0]['intField'])
