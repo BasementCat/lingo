@@ -41,7 +41,10 @@ class Field(object):
 		elif issubclass(ftype, Model):
 			return ftype(**value)
 		elif issubclass(ftype, datetime):
-			return parse(str(value))
+			out = parse(str(value))
+			if out.tzinfo is None or out.tzinfo.utcoffset(out) is None:
+				out = out.replace(tzinfo = pytz.timezone('UTC'))
+			return out
 		else:
 			return ftype(value)
 

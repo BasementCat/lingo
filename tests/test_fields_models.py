@@ -1,4 +1,5 @@
-import unittest, pymongo, bson
+import unittest, pymongo, bson, pytz
+from datetime import datetime
 from lingo import lingo, database
 
 class SampleEmbeddedModel(lingo.Model):
@@ -111,3 +112,49 @@ class TestFieldsModels(unittest.TestCase):
         self.assertEquals(3, i['nestedField']['foo'][0]['intField'])
         self.assertEquals('bar', i['nestedField']['bar'][0]['strField'])
         self.assertEquals(5, i['nestedField']['bar'][0]['intField'])
+
+    def test_NaiveDatetimeFieldToJson(self):
+        f = lingo.Field(datetime)
+        dt = datetime(2015, 1, 4, 5, 47, 45, 578293)
+        self.assertEquals('2015-01-04T05:47:45.578293+00:00', f._to_json(dt))
+
+    def test_AwareDatetimeFieldToJson(self):
+        f = lingo.Field(datetime)
+        dt = datetime(2015, 1, 4, 5, 47, 45, 578293).replace(tzinfo = pytz.timezone("UTC"))
+        self.assertEquals('2015-01-04T05:47:45.578293+00:00', f._to_json(dt))
+
+    def test_DatetimeStringToPython_Format1(self):
+        f = lingo.Field(datetime)
+        dt = datetime(2015, 1, 4, 5, 47, 45, 578293).replace(tzinfo = pytz.timezone("UTC"))
+        self.assertEquals(dt, f._to_python('2015-01-04T05:47:45.578293+00:00'))
+        self.assertEquals('UTC', dt.tzname())
+
+    def test_DatetimeStringToPython_Format2(self):
+        f = lingo.Field(datetime)
+        dt = datetime(2015, 1, 4, 5, 47, 45, 578293).replace(tzinfo = pytz.timezone("UTC"))
+        self.assertEquals(dt, f._to_python('2015-01-04T05:47:45.578293Z'))
+        self.assertEquals('UTC', dt.tzname())
+
+    def test_DatetimeStringToPython_Format3(self):
+        f = lingo.Field(datetime)
+        dt = datetime(2015, 1, 4, 5, 47, 45).replace(tzinfo = pytz.timezone("UTC"))
+        self.assertEquals(dt, f._to_python('2015-01-04T05:47:45+00:00'))
+        self.assertEquals('UTC', dt.tzname())
+
+    def test_DatetimeStringToPython_Format4(self):
+        f = lingo.Field(datetime)
+        dt = datetime(2015, 1, 4, 5, 47, 45).replace(tzinfo = pytz.timezone("UTC"))
+        self.assertEquals(dt, f._to_python('2015-01-04T05:47:45Z'))
+        self.assertEquals('UTC', dt.tzname())
+
+    def test_DatetimeStringToPython_Format5(self):
+        f = lingo.Field(datetime)
+        dt = datetime(2015, 1, 4, 5, 47, 45, 578293).replace(tzinfo = pytz.timezone("UTC"))
+        self.assertEquals(dt, f._to_python('2015-01-04T05:47:45.578293'))
+        self.assertEquals('UTC', dt.tzname())
+
+    def test_DatetimeStringToPython_Format6(self):
+        f = lingo.Field(datetime)
+        dt = datetime(2015, 1, 4, 5, 47, 45).replace(tzinfo = pytz.timezone("UTC"))
+        self.assertEquals(dt, f._to_python('2015-01-04T05:47:45'))
+        self.assertEquals('UTC', dt.tzname())
