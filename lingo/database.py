@@ -108,6 +108,8 @@ class MongoDB(Database):
     def save(self, model_instance, **kwargs):
         if model_instance.__class__._clsattr("__Embedded__"):
             raise ModelError("Model %s is embedded and cannot be saved"%(model_instance.__class__.__name__,))
+        if not model_instance.touch():
+            raise ModelError("touch() failed")
         if model_instance._id:
             self._getCollection(model_instance.__class__).update({"_id": model_instance._id}, model_instance._asdict(skip=["_id"]), upsert=True, safe=True, multi=False, **kwargs)
         else:
@@ -171,6 +173,8 @@ class CouchDB(Database):
     def save(self, model_instance):
         if model_instance.__class__._clsattr("__Embedded__"):
             raise ModelError("Model %s is embedded and cannot be saved"%(model_instance.__class__.__name__,))
+        if not model_instance.touch():
+            raise ModelError("touch() failed")
         skip = ['_id']
         _id = model_instance._id
         headers = {'Content-type': 'application/json'}

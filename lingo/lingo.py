@@ -142,6 +142,13 @@ class Model(object):
 			else:
 				setattr(self, k, v.default() if callable(v.default) else v.default)
 
+	def touch(self):
+		"""\
+		Used to implement updated timestamps.  What happens here is the responsibility of the subclass.
+		Return not True to prevent saving
+		"""
+		return True
+
 	def __setattr__(self, k, v):
 		if isinstance(self._clsattr(k), Field):
 			try:
