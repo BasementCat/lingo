@@ -4,6 +4,8 @@ import urllib
 import json
 from urlparse import urlparse
 import types
+import threading
+from datetime import datetime
 
 import pymongo
 import bson
@@ -131,32 +133,52 @@ class CouchDB(Database):
         self.dbname = dbname
 
         self.default_headers = {'Connection': 'keep-alive'}
-        self.conn = httplib.HTTPConnection(self.host, self.port)
-        self.conn.connect()
+        self.threadlocal = threading.local()
 
-        server_info = self._request('GET', '/').parsed_body
-        assert 'couchdb' in server_info
-        assert server_info['couchdb'] == 'Welcome'
+        self._get_connection(True, True, True)
+
+    def _get_connection(self, test_conn = False, sync_views = False, reconnect = False):
+        if reconnect or not hasattr(self.threadlocal, 'conn'):
+            if hasattr(self.threadlocal, 'conn'):
+                self.threadlocal.conn.close()
+            self.threadlocal.conn = httplib.HTTPConnection(self.host, self.port)
+            self.threadlocal.conn.connect()
+
+        if test_conn:
+            server_info = self._request('GET', '/').parsed_body
+            assert 'couchdb' in server_info
+            assert server_info['couchdb'] == 'Welcome'
 
         if sync_views:
             self.sync_views()
+
+        return self.threadlocal.conn
 
     def _request(self, method, url, query = {}, body = None, headers = {}):
         real_headers = {}
         real_headers.update(self.default_headers)
         real_headers.update(headers)
-        self.conn.request(method, url + '?' + urllib.urlencode(query), body, real_headers)
-        res = self.conn.getresponse()
-        if res.status < 200 or res.status >= 400:
-            ex = DatabaseError("%d %s" % (res.status, res.reason))
-            ex.body = res.read()
-            ex.parsed_body = json.loads(ex.body)
-            ex.response = res
-            raise ex
-        else:
-            res.body = res.read()
-            res.parsed_body = json.loads(res.body)
-            return res
+        max_tries = 3
+        for try_num in range(0, max_tries):
+            try:
+                self._get_connection().request(method, url + '?' + urllib.urlencode(query), body, real_headers)
+                res = self._get_connection().getresponse()
+            except (httplib.CannotSendRequest, httplib.BadStatusLine) as e:
+                self._get_connection(reconnect = True)
+                continue
+
+            if res.status < 200 or res.status >= 400:
+                ex = DatabaseError("%d %s" % (res.status, res.reason))
+                ex.body = res.read()
+                ex.parsed_body = json.loads(ex.body)
+                ex.response = res
+                raise ex
+            else:
+                res.body = res.read()
+                res.parsed_body = json.loads(res.body)
+                return res
+
+        raise DatabaseError("Connection to the database failed after %d tries" % (max_tries,))
 
     def _request_db(self, method, url, query = {}, body = None, headers = {}):
         return self._request(method, '/' + self.dbname + url, query, body, headers)
