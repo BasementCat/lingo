@@ -135,7 +135,7 @@ class CouchDB(Database):
         self.default_headers = {'Connection': 'keep-alive'}
         self.threadlocal = threading.local()
 
-        self._get_connection(True, True, True)
+        self._get_connection(True, sync_views, True)
 
     def _get_connection(self, test_conn = False, sync_views = False, reconnect = False):
         if reconnect or not hasattr(self.threadlocal, 'conn'):
