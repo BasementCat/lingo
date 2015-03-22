@@ -33,6 +33,16 @@ class SampleModel(lingo.Model):
 
 SampleModel.__Prototype__.linkField=lingo.Field(SampleModel, default=None)
 
+class TouchableModel(lingo.Model):
+	class __Prototype__:
+		__Database__ = 'CouchDB'
+		_id=lingo.Field(unicode)
+		strField=lingo.Field(unicode, default=u"")
+	
+	def touch(self):
+		self.strField = u'touched'
+		return True
+
 class TestCouchDB(unittest.TestCase):
 	def setUp(self):
 		try:
@@ -81,6 +91,12 @@ class TestCouchDB(unittest.TestCase):
 		i.database().save()
 		self.assertGreater(len(i._id), 0)
 		self.assertGreater(len(i._rev), 0)
+
+	def test_Touch(self):
+		i=TouchableModel()
+		self.assertEquals(i.strField, u'')
+		i.database().save()
+		self.assertEquals(i.strField, u'touched')
 
 	def test_delete(self):
 		i=SampleModel()

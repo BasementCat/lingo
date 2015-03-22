@@ -13,6 +13,15 @@ class SampleModel(lingo.Model):
 		strField=lingo.Field(unicode, default=u"")
 		embedField=lingo.Field(SampleEmbeddedModel, default=SampleEmbeddedModel)
 
+class TouchableModel(lingo.Model):
+	class __Prototype__:
+		_id=lingo.Field(bson.ObjectId)
+		strField=lingo.Field(unicode, default=u"")
+	
+	def touch(self):
+		self.strField = u'touched'
+		return True
+
 SampleModel.__Prototype__.linkField=lingo.Field(SampleModel, default=None)
 
 class TestMongoDB(unittest.TestCase):
@@ -41,6 +50,12 @@ class TestMongoDB(unittest.TestCase):
 		self.mdb.save(i)
 		self.assertIsInstance(i._id, bson.ObjectId)
 		self.assertGreater(len(str(i._id)), 0)
+
+	def test_Touch(self):
+		i=TouchableModel()
+		self.assertEquals(i.strField, u'')
+		self.mdb.save(i)
+		self.assertEquals(i.strField, u'touched')
 
 	def test_SaveNew(self):
 		i=SampleModel()
