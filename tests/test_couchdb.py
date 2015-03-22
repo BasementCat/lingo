@@ -3,7 +3,7 @@ import logging
 logging.basicConfig()
 
 import unittest#, pymongo, bson
-from lingo import lingo, database
+from lingo import lingo, database, errors
 
 class SampleEmbeddedModel(lingo.Model):
 	class __Prototype__:
@@ -71,11 +71,25 @@ class TestCouchDB(unittest.TestCase):
 		with self.assertRaises(lingo.ModelError):
 			i.database().save()
 
+	def test_CannotDeleteEmbeddedModels(self):
+		i=SampleEmbeddedModel()
+		with self.assertRaises(lingo.ModelError):
+			i.database().delete()
+
 	def test_NewObjectId(self):
 		i=SampleModel()
 		i.database().save()
 		self.assertGreater(len(i._id), 0)
 		self.assertGreater(len(i._rev), 0)
+
+	def test_delete(self):
+		i=SampleModel()
+		i.database().save()
+		self.assertGreater(len(i._id), 0)
+		self.assertGreater(len(i._rev), 0)
+		i.database().delete()
+		with self.assertRaises(errors.NotFoundError):
+			i2 = SampleModel.database().get(i._id)
 
 	def test_SaveNew(self):
 		i=SampleModel()

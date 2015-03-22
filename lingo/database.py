@@ -299,3 +299,13 @@ class CouchDB(Database):
 
     def delete_user(self, username):
         return self._request('DELETE', '/_users/org.couchdb.user:' + username)
+
+    def delete_document(self, docid, revid):
+        query = {'rev': revid} if revid else None
+        return self._request_db('DELETE', '/' + docid, query)
+
+    def delete(self, model_instance):
+        if model_instance.__class__._clsattr("__Embedded__"):
+            raise ModelError("Model %s is embedded and cannot be saved"%(model_instance.__class__.__name__,))
+        if model_instance._id:
+            return self.delete_document(model_instance._id, model_instance._rev)
