@@ -14,6 +14,7 @@ cat >/etc/couchdb/local.d/10-network.ini <<EOT
 port = 5984
 bind_address = 0.0.0.0
 EOT
+chown -R couchdb /etc/couchdb
 
 service couchdb restart
 

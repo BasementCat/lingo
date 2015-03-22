@@ -35,14 +35,36 @@ SampleModel.__Prototype__.linkField=lingo.Field(SampleModel, default=None)
 
 class TestCouchDB(unittest.TestCase):
 	def setUp(self):
+		try:
+			db = database.CouchDB('http://adminuser:password@localhost', 'lingo-test', sync_views = False, name = 'setup_temp')
+			db.delete_admin('adminuser')
+		except database.DatabaseError:
+			pass
 		database.Database.instances = {}
 		self.db = database.CouchDB('http://localhost', 'lingo-test', sync_views = False)
 		try:
 			self.db.delete_db('lingo-test')
 		except:
 			pass
+		try:
+			self.db.delete_db('lingo-test-auth')
+		except:
+			pass
 		self.db.create_db('lingo-test')
 		self.db.sync_views()
+
+	def test_Authentication(self):
+		self.db.create_admin('adminuser', 'password')
+		try:
+			self.db.create_db('lingo-test-auth')
+			self.assertTrue(False, "Was able to create a database without being an admin")
+		except database.DatabaseError:
+			db = database.CouchDB('http://adminuser:password@localhost', 'lingo-test', sync_views = False, name = 'auth_test')
+			try:
+				db.create_db('lingo-test-auth')
+				db.delete_db('lingo-test-auth')
+			except:
+				self.assertTrue(False, "Was not able to create a database as admin")
 
 	def test_CannotSaveEmbeddedModels(self):
 		i=SampleEmbeddedModel()

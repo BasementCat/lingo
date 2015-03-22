@@ -6,6 +6,7 @@ from urlparse import urlparse
 import types
 import threading
 from datetime import datetime
+import base64
 
 import pymongo
 import bson
@@ -126,8 +127,8 @@ class CouchDB(Database):
             raise NotImplementedError("Only the HTTP scheme is supported")
         elif (res.path and res.path != '/') or res.params or res.query or res.fragment:
             raise DatabaseError("Extra information was passed in the URL, which is not supported")
-        elif res.username or res.password:
-            raise NotImplementedError("Authentication is not supported")
+        self.username = res.username or None
+        self.password = res.password or None
         self.host = res.hostname
         self.port = res.port or 5984
         self.dbname = dbname
@@ -158,10 +159,15 @@ class CouchDB(Database):
         real_headers = {}
         real_headers.update(self.default_headers)
         real_headers.update(headers)
+        if self.username or self.password:
+            real_headers.update({'Authorization': 'Basic %s' % (base64.b64encode('%s:%s' % (self.username or '', self.password or '')))})
         max_tries = 3
         for try_num in range(0, max_tries):
             try:
-                self._get_connection().request(method, url + '?' + urllib.urlencode(query), body, real_headers)
+                qs = ''
+                if query is not None:
+                    qs = '?' + urllib.urlencode(query)
+                self._get_connection().request(method, url + qs, body, real_headers)
                 res = self._get_connection().getresponse()
             except (httplib.CannotSendRequest, httplib.BadStatusLine) as e:
                 self._get_connection(reconnect = True)
@@ -276,3 +282,20 @@ class CouchDB(Database):
                     json.dumps(doc),
                     {'Content-type': 'application/json'}
                 ).parsed_body
+
+    def create_admin(self, username, password):
+        return self._request('PUT', '/_config/admins/' + username, None, '"%s"' % (password,))
+
+    def create_user(self, username, password, roles = []):
+        return self._request('POST', '/_users', None, json.dumps(dict(
+            id = 'org.couchdb.user:' + username,
+            name = username,
+            roles = roles,
+            password = password
+        )))
+
+    def delete_admin(self, username):
+        return self._request('DELETE', '/_config/admins/' + username)
+
+    def delete_user(self, username):
+        return self._request('DELETE', '/_users/org.couchdb.user:' + username)
