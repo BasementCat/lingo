@@ -119,6 +119,76 @@ class MongoDB(Database):
             model_instance._id=self._getCollection(model_instance.__class__).insert(model_instance._asdict(skip=["_id"]), safe=True, **kwargs)
         return model_instance._id
 
+class CouchDBViewResult(object):
+    def __init__(self, db, model, view, keys = None, limit = None, page = 0, use_startkey = False):
+        if use_startkey:
+            raise NotImplementedError("Only pagination by limit/offset is supported")
+
+        self.db = db
+        self.model = model
+        self.view = view
+        self.keys = keys
+        self.limitnum = limit
+        self.pagenum = page
+
+        self._total = None
+        self._data = None
+
+    def page(self, pagenum):
+        self.pagenum = pagenum
+        self._data = None
+        return self
+
+    def limit(self, limit):
+        self.limitnum = limit
+        self._data = None
+        return self
+
+    def pages(self):
+        if self._total is None:
+            self.fetch()
+        if self.limitnum is None:
+            return 1 if self._total else 0
+        return int(self._total / self.limitnum) + (1 if self._total % float(self.limitnum) > 0 else 0)
+
+    def fetch(self):
+        method = 'GET'
+        body = None
+        headers = {}
+        if self.keys:
+            body = json.dumps({'keys': self.keys if isinstance(self.keys, list) else [self.keys]})
+            method = 'POST'
+            headers = {'Content-type': 'application/json'}
+        query = {'include_docs': 'true'}
+        if self.limitnum is not None:
+            query.update({
+                'limit': self.limitnum,
+                'skip': self.pagenum * self.limitnum
+            })
+        res = self.db._request_db(method, '/_design/' + self.model.get_type_name() + '/_view/' + self.view, query, body, headers).parsed_body
+        # res looks like: {offset: 0, total_rows: 100, rows: [{doc: {document data}, id: foobar, key: returnedkey, value: emittedvalue}, ...]}
+        self._total = res['total_rows']
+        self._data = [self.model(**row['doc']) for row in res['rows']]
+
+        return self
+
+    def _get_data(self):
+        if self._data is None:
+            self.fetch()
+        return self._data
+
+    def __len__(self):
+        return len(self._get_data())
+
+    def __getitem__(self, key):
+        return self._get_data().__getitem__(key)
+
+    def __iter__(self):
+        return self._get_data().__iter__()
+
+    def __contains__(self, item):
+        return self._get_data().__contains__(item)
+
 class CouchDB(Database):
     def __init__(self, host, dbname, sync_views = True, name = None):
         super(CouchDB, self).__init__(name)
@@ -242,17 +312,7 @@ class CouchDB(Database):
                 raise e
 
     def find(self, model, view, keys = None):
-        # TODO: limit, offset
-        method = 'GET'
-        body = None
-        headers = {}
-        if keys:
-            body = json.dumps({'keys': keys if isinstance(keys, list) else [keys]})
-            method = 'POST'
-            headers = {'Content-type': 'application/json'}
-        res = self._request_db(method, '/_design/' + model.get_type_name() + '/_view/' + view, {'include_docs': 'true'}, body, headers).parsed_body
-        # res looks like: {offset: 0, total_rows: 100, rows: [{doc: {document data}, id: foobar, key: returnedkey, value: emittedvalue}, ...]}
-        return [model(**row['doc']) for row in res['rows']]
+        return CouchDBViewResult(self, model, view, keys)
 
     def sync_views(self):
         docs = {}

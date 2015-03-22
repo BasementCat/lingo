@@ -160,7 +160,8 @@ class TestCouchDB(unittest.TestCase):
 
 	def test_FindMissingView(self):
 		with self.assertRaises(lingo.DatabaseError):
-			res = SampleModel.database().find('notarealview')
+			# Use len() to force the data to be retrieved
+			res = len(SampleModel.database().find('notarealview'))
 		
 	def test_GetMissing(self):
 		with self.assertRaises(lingo.NotFoundError):
@@ -225,6 +226,26 @@ class TestCouchDB(unittest.TestCase):
 			t_get,
 			(t_get / float(len(objs))) * 1000
 			))
+
+	def test_Pagination(self):
+		fields = []
+		for i in range(0, 100):
+			v = SampleModel(strField = "Test %d" % (i,))
+			self.db.save(v)
+			fields.append(v.strField)
+
+		res = SampleModel.database().find('getByStrField')
+		res.limit(19)
+		self.assertEquals(res.pages(), 6)
+		for pagenum in range(0, 6):
+			res.page(pagenum)
+			if pagenum == 5:
+				self.assertEquals(len(res), 5)
+			else:
+				self.assertEquals(len(res), 19)
+
+			for obj in res:
+				self.assertTrue(obj.strField in fields)
 
 if __name__=="__main__":
 	unittest.main()
