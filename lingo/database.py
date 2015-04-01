@@ -53,6 +53,22 @@ class Database(object):
             raise DatabaseError("The '%s' instance '%s' does not exist" % (cls_, name_))
         return self.instances[cls_][name_]
 
+    def preprocess(self, model_instance, data):
+        return True
+
+    def attach(self, model_instance, name, file_obj = None, data = None, content_type = None):
+        raise DatabaseError("Attachments are not supported by " + self.__class__.__name__)
+
+    def attachments(self, model_instance):
+        raise DatabaseError("Attachments are not supported by " + self.__class__.__name__)
+
+    def get_attachment(self, model_instance, name):
+        raise DatabaseError("Attachments are not supported by " + self.__class__.__name__)
+
+    def delete_attachment(self, model_instance, name):
+        raise DatabaseError("Attachments are not supported by " + self.__class__.__name__)
+        
+
 class DatabasePartial(object):
     def __init__(self, model_or_instance, db_instance):
         self.model_or_instance = model_or_instance
@@ -225,7 +241,7 @@ class CouchDB(Database):
 
         return self.threadlocal.conn
 
-    def _request(self, method, url, query = {}, body = None, headers = {}):
+    def _request(self, method, url, query = {}, body = None, headers = {}, parse_body = True):
         real_headers = {}
         real_headers.update(self.default_headers)
         real_headers.update(headers)
@@ -246,18 +262,18 @@ class CouchDB(Database):
             if res.status < 200 or res.status >= 400:
                 ex = DatabaseError("%d %s" % (res.status, res.reason))
                 ex.body = res.read()
-                ex.parsed_body = json.loads(ex.body)
+                ex.parsed_body = json.loads(ex.body) if parse_body else None
                 ex.response = res
                 raise ex
             else:
                 res.body = res.read()
-                res.parsed_body = json.loads(res.body)
+                res.parsed_body = json.loads(res.body) if parse_body else None
                 return res
 
         raise DatabaseError("Connection to the database failed after %d tries" % (max_tries,))
 
-    def _request_db(self, method, url, query = {}, body = None, headers = {}):
-        return self._request(method, '/' + self.dbname + url, query, body, headers)
+    def _request_db(self, method, url, query = {}, body = None, headers = {}, parse_body = True):
+        return self._request(method, '/' + self.dbname + url, query, body, headers, parse_body)
 
     def create_db(self, dbname):
         return self._request('PUT', '/' + dbname)
@@ -277,25 +293,43 @@ class CouchDB(Database):
         _id = model_instance._id
         headers = {'Content-type': 'application/json'}
         typename = model_instance.__class__.get_type_name()
+        attachment_stubs = {'_attachments': {k: v._asdict() for k, v in model_instance._attachments.items() if not v._new}}
         if not _id:
             skip.append('_rev')
+            data = model_instance._asdict(skip = skip, extra = {'type': typename})
+            data.update(attachment_stubs)
             res = self._request_db(
                 'POST',
                 '/',
                 {},
-                json.dumps(model_instance._asdict(skip = skip, extra = {'type': typename})),
+                json.dumps(data),
                 headers
             ).parsed_body
         else:
+            data = model_instance._asdict(skip = skip, extra = {'type': typename})
+            data.update(attachment_stubs)
             res = self._request_db(
                 'PUT',
                 '/' + _id,
                 {},
-                json.dumps(model_instance._asdict(skip = skip, extra = {'type': typename})),
+                json.dumps(data),
                 headers
             ).parsed_body
         model_instance._id = res['id']
         model_instance._rev = res['rev']
+        deleted_attachments = []
+        for attachment in model_instance._attachments.values():
+            if attachment._new:
+                res = self._request_db('PUT', '/' + model_instance._id + '/' + attachment.name, {'rev': model_instance._rev}, attachment.data)
+                attachment._new = False
+            elif attachment._deleted:
+                res = self._request_db('DELETE', '/' + model_instance._id + '/' + attachment.name, {'rev': model_instance._rev})
+                deleted_attachments.append(attachment.name)
+            else:
+                continue
+            model_instance._rev = res.parsed_body['rev']
+        for name in deleted_attachments:
+            del model_instance._attachments[name]
         return model_instance._id
 
     def get(self, model, _id):
@@ -369,3 +403,32 @@ class CouchDB(Database):
             raise ModelError("Model %s is embedded and cannot be saved"%(model_instance.__class__.__name__,))
         if model_instance._id:
             return self.delete_document(model_instance._id, model_instance._rev)
+
+    def preprocess(self, model_instance, data):
+        # Bypass strict mode
+        model_instance.__dict__['_attachments'] = {}
+        if '_attachments' in data:
+            for k, v in data['_attachments'].items():
+                model_instance._attachments[k] = lingo.Attachment(model_instance, k, _new = False, **v)
+            del data['_attachments']
+        return True
+
+    def attach(self, model_instance, name, file_obj = None, data = None, content_type = None):
+        model_instance._attachments[name] = lingo.Attachment.create(model_instance, name, file_obj, data, content_type)
+
+    def attachments(self, model_instance):
+        return model_instance._attachments
+
+    def get_attachment(self, model_instance, name):
+        # Intentionally raise KeyError if the attachment doesn't exist
+        a = model_instance._attachments[name]
+        if a.stub or not a.data:
+            return self._request_db('GET', '/' + model_instance._id + '/' + a.name, parse_body = False).body
+        return a.body
+
+    def delete_attachment(self, model_instance, name):
+        if name in model_instance._attachments:
+            if not model_instance._attachments[name]._new:
+                model_instance._attachments[name]._deleted = True
+            else:
+                del model_instance._attachments[name]

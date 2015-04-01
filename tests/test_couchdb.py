@@ -1,5 +1,6 @@
 import time
 import logging
+from StringIO import StringIO
 logging.basicConfig()
 
 import unittest#, pymongo, bson
@@ -246,6 +247,74 @@ class TestCouchDB(unittest.TestCase):
 
 			for obj in res:
 				self.assertTrue(obj.strField in fields)
+
+	def test_SaveAndGetAttachment_String(self):
+		i=SampleModel(strField="foobar")
+		i.attach('test.txt', data = "hello world")
+		i.database().save()
+		tempid=i._id
+		
+		del(i)
+		i=SampleModel.database().get(tempid)
+		self.assertEquals("hello world", i.get_attachment('test.txt'))
+
+	def test_ReadAttachment(self):
+		i=SampleModel(strField="foobar")
+		i.attach('test.txt', data = "hello world")
+		i.database().save()
+		tempid=i._id
+		
+		del(i)
+		i=SampleModel.database().get(tempid)
+		self.assertEquals("hello world", i.attachments()['test.txt'].read())
+
+	def test_SaveAndGetAttachment_Resave(self):
+		i=SampleModel(strField="foobar")
+		i.attach('test.txt', data = "hello world")
+		i.database().save()
+		tempid=i._id
+		
+		del(i)
+		i=SampleModel.database().get(tempid)
+		self.assertEquals("hello world", i.get_attachment('test.txt'))
+		i.strField = "barbaz"
+		i.database().save()
+
+		del(i)
+		i=SampleModel.database().get(tempid)
+		self.assertEquals("hello world", i.get_attachment('test.txt'))
+
+	def test_SaveAndGetAttachment_File(self):
+		i=SampleModel(strField="foobar")
+		i.attach('test.txt', file_obj = StringIO("hello world"))
+		i.database().save()
+		tempid=i._id
+		
+		del(i)
+		i=SampleModel.database().get(tempid)
+		self.assertEquals("hello world", i.get_attachment('test.txt'))
+
+	def test_DeleteAttachment(self):
+		i=SampleModel(strField="foobar")
+		i.attach('test.txt', data = "hello world")
+		i.database().save()
+		tempid=i._id
+		
+		del(i)
+		i=SampleModel.database().get(tempid)
+		self.assertEquals("hello world", i.get_attachment('test.txt'))
+		i.strField = "barbaz"
+		i.database().save()
+
+		del(i)
+		i=SampleModel.database().get(tempid)
+		i.delete_attachment('test.txt')
+		i.database().save()
+
+		del(i)
+		i=SampleModel.database().get(tempid)
+		with self.assertRaises(KeyError):
+			i.get_attachment('test.txt')
 
 if __name__=="__main__":
 	unittest.main()

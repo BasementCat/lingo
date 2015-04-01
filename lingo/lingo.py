@@ -1,6 +1,9 @@
 import functools
 import inspect
 from datetime import datetime
+import mimetypes
+import base64
+import logging
 
 import bson
 
@@ -10,18 +13,20 @@ import pytz
 from errors import *
 import database
 
-class combomethod(object):
-    def __init__(self, method):
-        self.method = method
+log = logging.getLogger(__name__)
 
-    def __get__(self, obj=None, objtype=None):
-        @functools.wraps(self.method)
-        def _wrapper(*args, **kwargs):
-            if obj is not None:
-                return self.method(obj, *args, **kwargs)
-            else:
-                return self.method(objtype, *args, **kwargs)
-        return _wrapper
+class combomethod(object):
+	def __init__(self, method):
+		self.method = method
+
+	def __get__(self, obj=None, objtype=None):
+		@functools.wraps(self.method)
+		def _wrapper(*args, **kwargs):
+			if obj is not None:
+				return self.method(obj, *args, **kwargs)
+			else:
+				return self.method(objtype, *args, **kwargs)
+		return _wrapper
 
 class Field(object):
 	def __init__(self, ftype=None, fsubtype=None, validation=None, default=None, doc=None):
@@ -95,6 +100,41 @@ class Field(object):
 			self.validation(value) #Should raise ValidationError on failure
 		return value
 
+class Attachment(object):
+	def __init__(self, doc, name, **kwargs):
+		self.doc = doc
+		self.name = name
+		self.content_type = None
+		self.data = None
+		self.length = None
+		self.stub = None
+
+		self._new = True
+		self._deleted = False
+		for k, v in kwargs.items():
+			setattr(self, k, v)
+
+	@classmethod
+	def create(self, doc, name, file_obj = None, data = None, content_type = None):
+		if not (file_obj or data):
+			raise ModelError("Either a file-like object or a string of data is required")
+		return self(doc, name, content_type = content_type or mimetypes.guess_type(name)[0] or 'application/octet-stream', data = data or file_obj.read(), stub = False)
+
+	def read(self):
+		if self.data:
+			return self.data
+		return self.doc.database().get_attachment(self.name)
+
+	def _asdict(self, with_data = False):
+		out = dict(
+			content_type = self.content_type,
+		)
+		if with_data and not self.stub and self.data:
+			out['data'] = base64.b64encode(self.data)
+		else:
+			out['stub'] = True
+		return out
+
 class Model(object):
 	class __DefaultPrototype__:
 		__Strict__=False	#If true, assignments to attributes not defined in __Prototype__ are an error
@@ -136,6 +176,10 @@ class Model(object):
 
 	def __init__(self, **kwargs):
 		self.__data__={}
+		try:
+			self.database().preprocess(kwargs)
+		except Exception as e:
+			log.error("Can't preprocess: %s: %s" % (e.__class__.__name__, str(e)))
 		for k,v in self.__class__._fields().items():
 			if k in kwargs:
 				setattr(self, k, kwargs[k])
@@ -162,6 +206,12 @@ class Model(object):
 			raise ValidationError("%s: No such attribute %s"%(self.__class__.__name__, k))
 
 	def __getattr__(self, k):
+		# Special methods that interact with the database
+		if k in ['save', 'attach', 'attachments', 'get_attachment', 'delete_attachment']:
+			def wrapped_special_method(*args, **kwargs):
+				return getattr(self.database(), k)(*args, **kwargs)
+			return wrapped_special_method
+
 		f=self.__class__._clsattr(k)
 		if isinstance(f, Field):
 			out=self.__dict__['__data__'][k]
