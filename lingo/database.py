@@ -320,7 +320,7 @@ class CouchDB(Database):
         deleted_attachments = []
         for attachment in model_instance._attachments.values():
             if attachment._new:
-                res = self._request_db('PUT', '/' + model_instance._id + '/' + attachment.name, {'rev': model_instance._rev}, attachment.data)
+                res = self._request_db('PUT', str('/' + model_instance._id + '/' + attachment.name), {'rev': model_instance._rev}, attachment.data, {'Content-type': attachment.content_type})
                 attachment._new = False
             elif attachment._deleted:
                 res = self._request_db('DELETE', '/' + model_instance._id + '/' + attachment.name, {'rev': model_instance._rev})

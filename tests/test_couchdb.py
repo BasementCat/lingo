@@ -316,5 +316,15 @@ class TestCouchDB(unittest.TestCase):
 		with self.assertRaises(KeyError):
 			i.get_attachment('test.txt')
 
+	def test_SaveAndGetAttachment_String_BinaryData(self):
+		i=SampleModel(strField="foobar")
+		i.attach('test.png', data = "\x89PNG\r\nhello world")
+		i.database().save()
+		tempid=i._id
+		
+		del(i)
+		i=SampleModel.database().get(tempid)
+		self.assertEquals("\x89PNG\r\nhello world", i.get_attachment('test.png'))
+
 if __name__=="__main__":
 	unittest.main()
