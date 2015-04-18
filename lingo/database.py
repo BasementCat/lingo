@@ -253,7 +253,7 @@ class CouchDB(Database):
                 qs = ''
                 if query is not None:
                     qs = '?' + urllib.urlencode(query)
-                self._get_connection().request(method, url + qs, body, real_headers)
+                self._get_connection().request(method, str(url + qs), body, real_headers)
                 res = self._get_connection().getresponse()
             except (httplib.CannotSendRequest, httplib.BadStatusLine) as e:
                 self._get_connection(reconnect = True)
@@ -320,7 +320,7 @@ class CouchDB(Database):
         deleted_attachments = []
         for attachment in model_instance._attachments.values():
             if attachment._new:
-                res = self._request_db('PUT', str('/' + model_instance._id + '/' + attachment.name), {'rev': model_instance._rev}, attachment.data, {'Content-type': attachment.content_type})
+                res = self._request_db('PUT', '/' + model_instance._id + '/' + attachment.name, {'rev': model_instance._rev}, attachment.data, {'Content-type': attachment.content_type})
                 attachment._new = False
             elif attachment._deleted:
                 res = self._request_db('DELETE', '/' + model_instance._id + '/' + attachment.name, {'rev': model_instance._rev})
