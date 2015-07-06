@@ -184,7 +184,7 @@ class CouchDBViewResult(object):
         res = self.db._request_db(method, '/_design/' + self.model.get_type_name() + '/_view/' + self.view, query, body, headers).parsed_body
         # res looks like: {offset: 0, total_rows: 100, rows: [{doc: {document data}, id: foobar, key: returnedkey, value: emittedvalue}, ...]}
         self._total = res['total_rows']
-        self._data = [self.model(**row['doc']) for row in res['rows']]
+        self._data = [self.db._class_for_data(row['doc'], self.model)(**row['doc']) for row in res['rows']]
 
         return self
 
@@ -206,6 +206,8 @@ class CouchDBViewResult(object):
         return self._get_data().__contains__(item)
 
 class CouchDB(Database):
+    _subclass_map = {}
+
     def __init__(self, host, dbname, sync_views = True, name = None):
         super(CouchDB, self).__init__(name)
         res = urlparse(host)
@@ -432,3 +434,17 @@ class CouchDB(Database):
                 model_instance._attachments[name]._deleted = True
             else:
                 del model_instance._attachments[name]
+
+    @classmethod
+    def _load_subclasses(self):
+        self._subclass_map = {cls.__name__: cls for cls in lingo.Model.__subclasses__()}
+
+    @classmethod
+    def _class_for_data(self, data, model=None):
+        if 'type' in data:
+            for _ in range(0, 2):
+                try:
+                    return self._subclass_map[data['type']]
+                except KeyError:
+                    self._load_subclasses()
+        return model

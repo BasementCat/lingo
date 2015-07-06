@@ -32,6 +32,24 @@ class SampleModel(lingo.Model):
 			}
 		}
 
+class SampleModel2(lingo.Model):
+	class __Prototype__:
+		__Database__ = 'CouchDB'
+		_id=lingo.Field(unicode)
+		_rev=lingo.Field(unicode)
+		strField=lingo.Field(unicode, default=u"")
+		embedField=lingo.Field(SampleEmbeddedModel, default=SampleEmbeddedModel)
+
+		__Views__ = {
+			'getAll': {
+				'map': """\
+					function(doc) {
+						emit(doc.id, doc.id);
+					}
+				"""
+			}
+		}
+
 SampleModel.__Prototype__.linkField=lingo.Field(SampleModel, default=None)
 
 class TouchableModel(lingo.Model):
@@ -124,6 +142,13 @@ class TestCouchDB(unittest.TestCase):
 
 		res = SampleModel.database().find('getByStrField')
 		self.assertEquals(4, len(res))
+
+	def test_ModelMap(self):
+		SampleModel(strField='SampleModel').database().save()
+		SampleModel2(strField='SampleModel2').database().save()
+		res = SampleModel.database().find('getByStrField')
+		for obj in res:
+			self.assertEquals(obj.__class__.__name__, obj.strField)
 
 	def test_FindOneKey(self):
 		for v in ["foo", "foo", "bar", "baz"]:

@@ -8,7 +8,7 @@ if os.environ.get('USER','') == 'vagrant':
 
 setup(
 	name='lingo',
-	version='0.8.2',
+	version='0.8.3',
 	description='A simple MongoDB/CouchDB ORM for Python',
 	long_description='',
 	classifiers=[
